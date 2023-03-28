@@ -5,7 +5,37 @@ import {
 } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
 
-console.log(`Function "browser-with-cors" up and running!`);
+console.log(`Function "flight-service" up and running!`);
+
+interface Flight {
+    ident: string;
+    depart_date: string;
+}
+
+// function validates user input
+// if flight departure date > 48 hours, schedule flight
+// if flight departure date < 48, results are returned
+
+async function createFlight(supabaseClient: SupabaseClient, task: Flight) {
+    // TODO validate user input flight
+
+    let tets = `https://api.datamuse.com/words?rel_rhy=${task.ident}`;
+
+    console.log('testing task', tets, task);
+
+    const response = await fetch(
+        `https://api.datamuse.com/words?rel_rhy=${task.ident}`
+    );
+    const text = await response.text();
+    const parsed = await JSON.parse(text);
+
+    console.log('parsed', parsed);
+
+    return new Response(JSON.stringify({ parsed }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+    });
+}
 
 serve(async (req: Request) => {
     if (req.method === 'OPTIONS') {
@@ -34,19 +64,21 @@ serve(async (req: Request) => {
         } = await supabaseClient.auth.getUser();
 
         // And we can run queries in the context of our authenticated user
-        const { data, error } = await supabaseClient
-            .from('profiles')
-            .select('*');
-        if (error) throw error;
+        // const { data, error } = await supabaseClient
+        //     .from('profiles')
+        //     .select('*');
+        // if (error) throw error;
 
         // log the request body
         const body = await req.json();
         console.log(body);
 
-        return new Response(JSON.stringify({ user, data }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            status: 200,
-        });
+        return createFlight(supabaseClient, body);
+
+        // return new Response(JSON.stringify({ user, flightData }), {
+        //     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        //     status: 200,
+        // });
     } catch (error) {
         return new Response(JSON.stringify({ error: error.message }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
