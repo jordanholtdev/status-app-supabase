@@ -23,11 +23,9 @@ async function createFlight(supabaseClient: SupabaseClient, task: Flight) {
         `https://api.datamuse.com/words?rel_rhy=${task.ident}`
     );
     const text = await response.text();
-    const parsed = await JSON.parse(text);
+    const results = await JSON.parse(text);
 
-    console.log('parsed', parsed);
-
-    return new Response(JSON.stringify({ parsed }), {
+    return new Response(JSON.stringify({ results }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
     });

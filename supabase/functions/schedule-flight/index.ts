@@ -1,29 +1,72 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
+import { corsHeaders } from '../_shared/cors.ts';
 import {
     createClient,
     SupabaseClient,
 } from 'https://esm.sh/@supabase/supabase-js@2';
-import { corsHeaders } from '../_shared/cors.ts';
 
-interface Task {
-    ident: string;
-    user_id: number;
+console.log(`Function "schedule-flight" up and running!`);
+
+interface FlightRequest {
+    depart_date: string;
+    flight: {
+        numSyllables: number;
+        score: number;
+        word: string;
+    };
 }
 
-async function createTask(supabaseClient: SupabaseClient, task: Task) {
-    const { error } = await supabaseClient.from('testing_flights').insert(task);
+async function scheduleFlightAlerts(
+    // accepts the flght selection & supabase client
+    // inserts the selection into the database
+    // registers the flight selection to receive alerts
+    supabaseClient: SupabaseClient,
+    flightRequest: FlightRequest
+) {
+    // get the user session for row level security RLS
+    const {
+        data: { user },
+    } = await supabaseClient.auth.getUser();
+
+    const { data, error } = await supabaseClient
+        .from('testing_flights')
+        .insert([
+            {
+                name: flightRequest.flight.word,
+                user_id: user?.id,
+            },
+        ])
+        .select();
     if (error) throw error;
 
-    return new Response(JSON.stringify({ task }), {
+    return new Response(JSON.stringify({ data }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
     });
 }
 
-serve(async (req) => {
+async function handleIncomingFlightAlerts(
+    supabaseClient: SupabaseClient,
+    id: string
+) {
+    // handles the incoming alerts to the registered URL for flight aware alerts
+    // accepts an http POST request that matches a specific pattern
+    // the alert is then parsed & inserted into the database
+
+    console.log('handleAlert', id);
+
+    return new Response(JSON.stringify({ test: 'alerts get' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+    });
+}
+
+serve(async (req: Request) => {
+    // takes in the request
     const { url, method } = req;
 
-    // This is needed if you're planning to invoke your function from a browser.
+    // CORS preflight checklist for browsers
+    // this function is invoked from both browser and server
     if (method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders });
     }
@@ -46,31 +89,40 @@ serve(async (req) => {
             }
         );
 
-        // For more details on URLPattern, check https://developer.mozilla.org/en-US/docs/Web/API/URL_Pattern_API
-        const taskPattern = new URLPattern({ pathname: '/restful-tasks/:id' });
-        const matchingPath = taskPattern.exec(url);
-        const id = matchingPath ? matchingPath.pathname.groups.id : null;
+        const regex = /\/(\d+)$/; // Regular expression to match a slash followed by one or more digits at the end of the string
+        const match = url.match(regex); // Match the URL against the regular expression
+        let alertId = match ? '' : null;
 
-        let task = null;
+        if (match) {
+            const number = parseInt(match[1], 10); // Parse the matched number as an integer
+            let result = number.toString();
+            alertId = result;
+        }
+
+        let flight = null;
+
         if (method === 'POST' || method === 'PUT') {
             const body = await req.json();
-            task = body.task;
+            flight = body;
         }
 
         // call relevant method based on method and id
         switch (true) {
-            case id && method === 'GET':
-                return getTask(supabaseClient, id as string);
-            case id && method === 'PUT':
-                return updateTask(supabaseClient, id as string, task);
-            case id && method === 'DELETE':
-                return deleteTask(supabaseClient, id as string);
+            case alertId && method === 'POST':
+                return handleIncomingFlightAlerts(
+                    supabaseClient,
+                    alertId as string
+                );
             case method === 'POST':
-                return createTask(supabaseClient, task);
-            case method === 'GET':
-                return getAllTasks(supabaseClient);
+                return scheduleFlightAlerts(supabaseClient, flight);
             default:
-                return getAllTasks(supabaseClient);
+                return new Response(JSON.stringify({ ok: 'good' }), {
+                    headers: {
+                        ...corsHeaders,
+                        'Content-Type': 'application/json',
+                    },
+                    status: 200,
+                });
         }
     } catch (error) {
         console.error(error);
