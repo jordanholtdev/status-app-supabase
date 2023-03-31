@@ -12,6 +12,40 @@ interface Flight {
     selected_date: string;
 }
 
+// schedule flight lookup
+
+async function scheduleFlightLookup(
+    // accepts the flght selection & supabase client
+    // inserts the selection into the database
+    // registers the flight selection to receive alerts
+    supabaseClient: SupabaseClient,
+    scheduleFlightRequest: Flight
+) {
+    // get the user session for row level security RLS
+    const {
+        data: { user },
+    } = await supabaseClient.auth.getUser();
+
+    const { data, error } = await supabaseClient
+        .from('schedule_lookup')
+        .insert([
+            {
+                term: scheduleFlightRequest.term,
+                scheduled_date: scheduleFlightRequest.selected_date,
+                user_id: user?.id,
+            },
+        ])
+        .select();
+    if (error) throw error;
+
+    let results = data;
+
+    return new Response(JSON.stringify({ results }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+    });
+}
+
 async function lookupFlight(supabaseClient: SupabaseClient, flight: Flight) {
     // TODO validate user input flight
 
@@ -52,10 +86,11 @@ async function lookupFlight(supabaseClient: SupabaseClient, flight: Flight) {
         });
     } else {
         console.log(
-            'The submitted date is not in range for immediate lookup. Checking for sheduling...'
+            'Submitted date not in range for immediate lookup. Checking for sheduling...'
         );
         if (submittedDate < new Date()) {
             // Date is too far in the past. Will not be scheduled.
+            console.log('Not scheduling: Date too far past');
             return new Response(
                 JSON.stringify({
                     results: 'Not scheduled, too far in the past',
@@ -71,16 +106,23 @@ async function lookupFlight(supabaseClient: SupabaseClient, flight: Flight) {
         } else {
             // Date is in the future: Schedule a lookup
             // Call the schedule lookup function
-            return new Response(
-                JSON.stringify({ results: `Sheduled for ${submittedDate}` }),
-                {
-                    headers: {
-                        ...corsHeaders,
-                        'Content-Type': 'application/json',
-                    },
-                    status: 200,
-                }
-            );
+            try {
+                console.log(`Lookup Scheduled On: ${submittedDate}`);
+                return scheduleFlightLookup(supabaseClient, flight);
+            } catch {
+                return new Response(
+                    JSON.stringify({
+                        results: `Sheduled for ${submittedDate}`,
+                    }),
+                    {
+                        headers: {
+                            ...corsHeaders,
+                            'Content-Type': 'application/json',
+                        },
+                        status: 200,
+                    }
+                );
+            }
         }
     }
 }
