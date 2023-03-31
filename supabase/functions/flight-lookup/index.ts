@@ -5,30 +5,84 @@ import {
 } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
 
-console.log(`Function "flight-service" up and running!`);
+console.log(`Function "flight-lookup" initiating`);
 
 interface Flight {
-    ident: string;
-    depart_date: string;
+    term: string;
+    selected_date: string;
 }
 
-// function validates user input
-// if flight departure date > 48 hours, schedule flight
-// if flight departure date < 48, results are returned
-
-async function createFlight(supabaseClient: SupabaseClient, task: Flight) {
+async function lookupFlight(supabaseClient: SupabaseClient, flight: Flight) {
     // TODO validate user input flight
 
-    const response = await fetch(
-        `https://api.datamuse.com/words?rel_rhy=${task.ident}`
-    );
-    const text = await response.text();
-    const results = await JSON.parse(text);
+    // Perform date check
+    const submittedDate = new Date(flight.selected_date);
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - 10); // limit searches 10 days in the past
+    const endDate = new Date();
+    endDate.setDate(endDate.getDate() + 2); // limit searches 2 days in the future
 
-    return new Response(JSON.stringify({ results }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-    });
+    if (submittedDate > startDate && submittedDate < endDate) {
+        // Fetch list if submitted date is within range
+
+        let results; // fetch lookup results
+        await fetch(`https://api.datamuse.com/words?rel_rhy=${flight.term}`)
+            .then((response) => {
+                if (!response.ok) {
+                    throw new Error('Network response was not OK');
+                }
+                return response.json();
+            })
+            .then((data) => {
+                results = data;
+            })
+            .catch((error) => {
+                return new Response(JSON.stringify({ error: error.message }), {
+                    headers: {
+                        ...corsHeaders,
+                        'Content-Type': 'application/json',
+                    },
+                    status: 502,
+                });
+            });
+
+        return new Response(JSON.stringify({ results }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200,
+        });
+    } else {
+        console.log(
+            'The submitted date is not in range for immediate lookup. Checking for sheduling...'
+        );
+        if (submittedDate < new Date()) {
+            // Date is too far in the past. Will not be scheduled.
+            return new Response(
+                JSON.stringify({
+                    results: 'Not scheduled, too far in the past',
+                }),
+                {
+                    headers: {
+                        ...corsHeaders,
+                        'Content-Type': 'application/json',
+                    },
+                    status: 200,
+                }
+            );
+        } else {
+            // Date is in the future: Schedule a lookup
+            // Call the schedule lookup function
+            return new Response(
+                JSON.stringify({ results: `Sheduled for ${submittedDate}` }),
+                {
+                    headers: {
+                        ...corsHeaders,
+                        'Content-Type': 'application/json',
+                    },
+                    status: 200,
+                }
+            );
+        }
+    }
 }
 
 serve(async (req: Request) => {
@@ -59,7 +113,7 @@ serve(async (req: Request) => {
 
         const body = await req.json();
 
-        return createFlight(supabaseClient, body);
+        return lookupFlight(supabaseClient, body);
     } catch (error) {
         return new Response(JSON.stringify({ error: error.message }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
