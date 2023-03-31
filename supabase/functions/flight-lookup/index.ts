@@ -12,8 +12,6 @@ interface Flight {
     selected_date: string;
 }
 
-// schedule flight lookup
-
 async function scheduleFlightLookup(
     // accepts the flght selection & supabase client
     // inserts the selection into the database
@@ -40,16 +38,20 @@ async function scheduleFlightLookup(
 
     let results = data;
 
-    return new Response(JSON.stringify({ results }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-    });
+    return new Response(
+        JSON.stringify({ results, isScheduled: false, lookupComplete: true }),
+        {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200,
+        }
+    );
 }
 
 async function lookupFlight(supabaseClient: SupabaseClient, flight: Flight) {
-    // TODO validate user input flight
-
-    // Perform date check
+    // lookupFlight handles flight lookup requests
+    // Performs date check:
+    // If date within range lookup executed immediately
+    // Future dates scheduled, past dates dropped
     const submittedDate = new Date(flight.selected_date);
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - 10); // limit searches 10 days in the past
@@ -93,7 +95,9 @@ async function lookupFlight(supabaseClient: SupabaseClient, flight: Flight) {
             console.log('Not scheduling: Date too far past');
             return new Response(
                 JSON.stringify({
-                    results: 'Not scheduled, too far in the past',
+                    results: [{ msg: 'not scheduled' }],
+                    isScheduled: false,
+                    lookupComplete: false,
                 }),
                 {
                     headers: {
