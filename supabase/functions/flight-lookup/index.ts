@@ -39,7 +39,12 @@ async function scheduleFlightLookup(
     let results = data;
 
     return new Response(
-        JSON.stringify({ results, isScheduled: false, lookupComplete: true }),
+        JSON.stringify({
+            results,
+            isScheduled: true,
+            lookupComplete: false,
+            lookupStatus: 'Scheduled',
+        }),
         {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             status: 200,
@@ -82,14 +87,25 @@ async function lookupFlight(supabaseClient: SupabaseClient, flight: Flight) {
                 });
             });
 
-        return new Response(JSON.stringify({ results }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            status: 200,
-        });
+        console.log(`Lookup Complete: ${submittedDate}.`);
+
+        return new Response(
+            JSON.stringify({
+                results,
+                isScheduled: false,
+                lookupComplete: true,
+                lookupStatus: 'Complete',
+            }),
+            {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                status: 200,
+            }
+        );
     } else {
         console.log(
-            'Submitted date not in range for immediate lookup. Checking for sheduling...'
+            `Search date:${submittedDate} - out of range for immediate lookup.`
         );
+        console.log(`Scheduling lookup...`);
         if (submittedDate < new Date()) {
             // Date is too far in the past. Will not be scheduled.
             console.log('Not scheduling: Date too far past');
@@ -98,6 +114,7 @@ async function lookupFlight(supabaseClient: SupabaseClient, flight: Flight) {
                     results: [{ msg: 'not scheduled' }],
                     isScheduled: false,
                     lookupComplete: false,
+                    lookupStatus: 'Not Scheduled',
                 }),
                 {
                     headers: {
@@ -116,7 +133,10 @@ async function lookupFlight(supabaseClient: SupabaseClient, flight: Flight) {
             } catch {
                 return new Response(
                     JSON.stringify({
-                        results: `Sheduled for ${submittedDate}`,
+                        results: [{ msg: 'Scheduled' }],
+                        isScheduled: true,
+                        lookupComplete: false,
+                        lookupStatus: 'Scheduled',
                     }),
                     {
                         headers: {
