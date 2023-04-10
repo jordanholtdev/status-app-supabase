@@ -6,7 +6,7 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
-config.toml
+
 
 node_modules
 dist
@@ -14,7 +14,7 @@ dist-ssr
 *.local
 .env
 .env.local
-*config.toml
+
 
 # Editor directories and files
 .vscode/*
@@ -135,3 +135,4 @@ dist
 
 # supabase
 .temp
+config.local.toml
