@@ -68,7 +68,7 @@ async function lookupFlight(supabaseClient: SupabaseClient, flight: Flight) {
 
         let results; // fetch lookup results
         await fetch(
-            `https://aeroapi.flightaware.com/aeroapi/flights/${flight.ident}`,
+            `https://aeroapi.flightaware.com/aeroapi/flights/${flight.ident}?start=${flight.selected_date}`,
             {
                 headers: {
                     Accept: 'application/json',
