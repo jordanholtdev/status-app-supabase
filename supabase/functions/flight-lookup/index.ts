@@ -67,7 +67,15 @@ async function lookupFlight(supabaseClient: SupabaseClient, flight: Flight) {
         // Fetch list if submitted date is within range
 
         let results; // fetch lookup results
-        await fetch(`https://api.datamuse.com/words?rel_rhy=${flight.ident}`)
+        await fetch(
+            `https://aeroapi.flightaware.com/aeroapi/flights/${flight.ident}`,
+            {
+                headers: {
+                    Accept: 'application/json',
+                    'x-apikey': Deno.env.get('FLIGHTAWARE_KEY') ?? '',
+                },
+            }
+        )
             .then((response) => {
                 if (!response.ok) {
                     throw new Error('Network response was not OK');
