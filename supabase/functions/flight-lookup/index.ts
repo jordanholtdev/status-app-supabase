@@ -8,7 +8,7 @@ import { corsHeaders } from '../_shared/cors.ts';
 console.log(`Function "flight-lookup" initiating`);
 
 interface Flight {
-    term: string;
+    ident: string;
     selected_date: string;
 }
 
@@ -17,7 +17,7 @@ async function scheduleFlightLookup(
     // inserts the selection into the database
     // registers the flight selection to receive alerts
     supabaseClient: SupabaseClient,
-    scheduleFlightRequest: Flight
+    flight: Flight
 ) {
     // get the user session for row level security RLS
     const {
@@ -28,8 +28,8 @@ async function scheduleFlightLookup(
         .from('schedule_lookup')
         .insert([
             {
-                term: scheduleFlightRequest.term,
-                scheduled_date: scheduleFlightRequest.selected_date,
+                ident: flight.ident,
+                flight_date: flight.selected_date,
                 user_id: user?.id,
             },
         ])
@@ -67,7 +67,15 @@ async function lookupFlight(supabaseClient: SupabaseClient, flight: Flight) {
         // Fetch list if submitted date is within range
 
         let results; // fetch lookup results
-        await fetch(`https://api.datamuse.com/words?rel_rhy=${flight.term}`)
+        await fetch(
+            `https://aeroapi.flightaware.com/aeroapi/flights/${flight.ident}?start=${flight.selected_date}`,
+            {
+                headers: {
+                    Accept: 'application/json',
+                    'x-apikey': Deno.env.get('FLIGHTAWARE_KEY') ?? '',
+                },
+            }
+        )
             .then((response) => {
                 if (!response.ok) {
                     throw new Error('Network response was not OK');

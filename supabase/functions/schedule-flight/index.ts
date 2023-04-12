@@ -10,9 +10,23 @@ console.log(`Function "schedule-flight" up and running!`);
 interface FlightRequest {
     depart_date: string;
     flight: {
-        numSyllables: number;
-        score: number;
-        word: string;
+        ident: string;
+        fa_flight_id: string;
+        filed_ete: number;
+        scheduled_out: Date;
+        scheduled_off: Date;
+        scheduled_on: Date;
+        origin: {
+            name: string;
+            city: string;
+            code_iata: string;
+        };
+        destination: {
+            name: string;
+            city: string;
+            code_iata: string;
+        };
+        aircraft_type: string;
     };
 }
 
@@ -29,10 +43,23 @@ async function scheduleFlightAlerts(
     } = await supabaseClient.auth.getUser();
 
     const { data, error } = await supabaseClient
-        .from('testing_flights')
+        .from('flights')
         .insert([
             {
-                name: flightRequest.flight.word,
+                ident: flightRequest.flight.ident,
+                fa_flight_id: flightRequest.flight.fa_flight_id,
+                filed_ete: flightRequest.flight.filed_ete,
+                scheduled_out: flightRequest.flight.scheduled_out,
+                scheduled_off: flightRequest.flight.scheduled_off,
+                scheduled_on: flightRequest.flight.scheduled_on,
+                origin_name: flightRequest.flight.origin.name,
+                origin_city: flightRequest.flight.origin.city,
+                origin_code_iata: flightRequest.flight.origin.code_iata,
+                destination_name: flightRequest.flight.destination.name,
+                destination_city: flightRequest.flight.destination.city,
+                destination_code_iata:
+                    flightRequest.flight.destination.code_iata,
+                aircraft_type: flightRequest.flight.aircraft_type,
                 user_id: user?.id,
             },
         ])
