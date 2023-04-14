@@ -72,17 +72,30 @@ async function scheduleFlightAlerts(
     });
 }
 
-async function handleIncomingFlightAlerts(
+async function handleIncomingScheduleCalls(
     supabaseClient: SupabaseClient,
-    id: string
+    id: string,
+    flight: {
+        name: string;
+    }
 ) {
     // handles the incoming alerts to the registered URL for flight aware alerts
     // accepts an http POST request that matches a specific pattern
     // the alert is then parsed & inserted into the database
 
-    console.log('handleAlert', id);
+    console.log('handleAlert', id, flight);
+    let results;
 
-    return new Response(JSON.stringify({ test: 'alerts get' }), {
+    const { data, error } = await supabaseClient
+        .from('schedule_lookup')
+        .select('*')
+        .eq('id', id);
+
+    if (error) {
+        throw error;
+    }
+
+    return new Response(JSON.stringify({ test: data[0] }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
     });
@@ -136,9 +149,10 @@ serve(async (req: Request) => {
         // call relevant method based on method and id
         switch (true) {
             case alertId && method === 'POST':
-                return handleIncomingFlightAlerts(
+                return handleIncomingScheduleCalls(
                     supabaseClient,
-                    alertId as string
+                    alertId as string,
+                    flight
                 );
             case method === 'POST':
                 return scheduleFlightAlerts(supabaseClient, flight);
