@@ -254,7 +254,7 @@ async function updateFlights(data: any[], supabaseClient: SupabaseClient) {
     );
     console.log(updatedFlights);
 
-    return new Response(JSON.stringify({ ok: 'update flight ok' }), {
+    return new Response(JSON.stringify({ ok: 'Flight updates successful' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
     });
@@ -284,7 +284,7 @@ async function handleIncomingScheduleCalls(
         if (error) throw error;
         return performLookup(data, supabaseClient);
     } else {
-        return new Response(JSON.stringify({ error: 'Invalid ID' }), {
+        return new Response(JSON.stringify({ error: 'Invalid request' }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             status: 200,
         });
@@ -319,7 +319,6 @@ serve(async (req: Request) => {
             }
         );
 
-        // Regular expression to match a slash followed by one or more words at the end of the string
         // Match the URL against the regular expression
         // Parse the matched number as an integer
         const regex = /\/(\w+)$/; // Regular expression to match a slash followed by one or more words at the end of the string
