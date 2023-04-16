@@ -72,9 +72,108 @@ async function scheduleFlightAlerts(
     });
 }
 
-async function performLookup() {
+async function handleInsertLookupResults(
+    scheduledLookupResults: any,
+    scheduledFlight: any,
+    supabaseClient: SupabaseClient
+) {
+    // Insert the lookup results into the database
+    // Return the results
+    console.log(
+        'scheduledLookupResults',
+        scheduledLookupResults.flights[0]['ident']
+    );
+    console.log('scheduledFlight', scheduledFlight.user_id);
+    const { data, error } = await supabaseClient
+        .from('flights')
+        .insert([
+            {
+                ident: scheduledLookupResults.flights[0]['ident'],
+                fa_flight_id: scheduledLookupResults.flights[0]['fa_flight_id'],
+                filed_ete: scheduledLookupResults.flights[0]['filed_ete'],
+                scheduled_out:
+                    scheduledLookupResults.flights[0]['scheduled_out'],
+                scheduled_off:
+                    scheduledLookupResults.flights[0]['scheduled_off'],
+                scheduled_on: scheduledLookupResults.flights[0]['scheduled_on'],
+                origin_name:
+                    scheduledLookupResults.flights[0]['origin']['name'],
+                origin_city:
+                    scheduledLookupResults.flights[0]['origin']['city'],
+                origin_code_iata:
+                    scheduledLookupResults.flights[0]['origin']['code_iata'],
+                destination_name:
+                    scheduledLookupResults.flights[0]['destination']['name'],
+                destination_city:
+                    scheduledLookupResults.flights[0]['destination']['city'],
+                destination_code_iata:
+                    scheduledLookupResults.flights[0]['destination'][
+                        'code_iata'
+                    ],
+                aircraft_type:
+                    scheduledLookupResults.flights[0]['aircraft_type'],
+                user_id: scheduledFlight.user_id,
+            },
+        ])
+        .select();
+    if (error) throw error;
+
+    const { data: scheduledToday, error: error2 } = await supabaseClient
+        .from('schedule_lookup')
+        .update({ lookup_complete: true })
+        .eq('id', scheduledFlight.id)
+        .select();
+    if (error2) throw error2;
+
+    console.log('data:', data, 'lookup complete:', scheduledToday);
+}
+
+async function performLookup(
+    scheduledToday: any,
+    supabaseClient: SupabaseClient
+) {
     // Perform the lookup
     // Return the results
+    console.log('scheduled', scheduledToday);
+    const lookupResults = Promise.all(
+        scheduledToday.map(async (scheduledFlight: any) => {
+            fetch(
+                `https://aeroapi.flightaware.com/aeroapi/flights/${scheduledFlight.ident}?start=${scheduledFlight.flight_date}`,
+                {
+                    headers: {
+                        Accept: 'application/json',
+                        'x-apikey': Deno.env.get('FLIGHTAWARE_KEY') ?? '',
+                    },
+                }
+            )
+                .then((response) => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not OK');
+                    }
+                    return response.json();
+                })
+                .then((data) => {
+                    handleInsertLookupResults(
+                        data,
+                        scheduledFlight,
+                        supabaseClient
+                    );
+                })
+                .catch((error) => {
+                    return new Response(
+                        JSON.stringify({ error: error.message }),
+                        {
+                            headers: {
+                                ...corsHeaders,
+                                'Content-Type': 'application/json',
+                            },
+                            status: 502,
+                        }
+                    );
+                });
+        })
+    );
+
     return new Response(JSON.stringify({ ok: 'perform lookup' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
@@ -176,7 +275,13 @@ async function handleIncomingScheduleCalls(
         if (error) throw error;
         return updateFlights(data, supabaseClient);
     } else if (id === 'schedule') {
-        return performLookup();
+        console.log(new Date().toISOString().split('T')[0]);
+        const { data, error } = await supabaseClient
+            .from('schedule_lookup')
+            .select('*')
+            .eq('flight_date', new Date().toISOString().split('T')[0]);
+        if (error) throw error;
+        return performLookup(data, supabaseClient);
     } else {
         return new Response(JSON.stringify({ error: 'Invalid ID' }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
