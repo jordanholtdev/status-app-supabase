@@ -11,6 +11,8 @@ jobs:
         env:
             OAUTH_GITHUB_CLIENT_ID: ${{ secrets.OAUTH_GITHUB_CLIENT_ID }}
             OAUTH_GITHUB_SECRET: ${{ secrets.OAUTH_GITHUB_SECRET }}
+            OAUTH_GOOGLE_CLIENT_ID: ${{ secrets.OAUTH_GOOGLE_CLIENT_ID }}
+            OAUTH_GOOGLE_SECRET: ${{ secrets.OAUTH_GOOGLE_SECRET }}
 
         steps:
             - uses: actions/checkout@v3
