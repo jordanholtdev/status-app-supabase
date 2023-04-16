@@ -79,11 +79,6 @@ async function handleInsertLookupResults(
 ) {
     // Insert the lookup results into the database
     // Return the results
-    console.log(
-        'scheduledLookupResults',
-        scheduledLookupResults.flights[0]['ident']
-    );
-    console.log('scheduledFlight', scheduledFlight.user_id);
     const { data, error } = await supabaseClient
         .from('flights')
         .insert([
@@ -124,8 +119,10 @@ async function handleInsertLookupResults(
         .eq('id', scheduledFlight.id)
         .select();
     if (error2) throw error2;
-
-    console.log('data:', data, 'lookup complete:', scheduledToday);
+    console.log(
+        'Scheduled flight lookups complete. Total lookups performed:',
+        scheduledToday.length
+    );
 }
 
 async function performLookup(
@@ -133,8 +130,8 @@ async function performLookup(
     supabaseClient: SupabaseClient
 ) {
     // Perform the lookup
-    // Return the results
-    console.log('scheduled', scheduledToday);
+    // Insert the results into the database
+    console.log('Performing scheduled lookups...');
     const lookupResults = Promise.all(
         scheduledToday.map(async (scheduledFlight: any) => {
             fetch(
@@ -174,18 +171,21 @@ async function performLookup(
         })
     );
 
-    return new Response(JSON.stringify({ ok: 'perform lookup' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-    });
+    return new Response(
+        JSON.stringify({
+            ok: 'Scheduled flight lookup in progress.',
+        }),
+        {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200,
+        }
+    );
 }
 
 async function handleDatabaseUpdate(
     updatedFlight: any,
     supabaseClient: SupabaseClient
 ) {
-    console.log('updated flight', updatedFlight.flights[0]['ident']);
-
     const { data, error } = await supabaseClient
         .from('flights')
         .update({
@@ -208,7 +208,7 @@ async function handleDatabaseUpdate(
         .select();
     if (error) throw error;
 
-    console.log('inserted', data);
+    console.log('Flight updates complete', data);
 }
 
 async function updateFlights(data: any[], supabaseClient: SupabaseClient) {
@@ -275,11 +275,12 @@ async function handleIncomingScheduleCalls(
         if (error) throw error;
         return updateFlights(data, supabaseClient);
     } else if (id === 'schedule') {
-        console.log(new Date().toISOString().split('T')[0]);
+        // Select all the scheduled flights for today from the database and return them
         const { data, error } = await supabaseClient
             .from('schedule_lookup')
             .select('*')
-            .eq('flight_date', new Date().toISOString().split('T')[0]);
+            .eq('flight_date', new Date().toISOString().split('T')[0])
+            .eq('lookup_complete', false);
         if (error) throw error;
         return performLookup(data, supabaseClient);
     } else {
