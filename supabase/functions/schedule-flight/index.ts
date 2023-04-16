@@ -72,33 +72,117 @@ async function scheduleFlightAlerts(
     });
 }
 
-async function handleIncomingScheduleCalls(
-    supabaseClient: SupabaseClient,
-    id: string,
-    flight: {
-        name: string;
-    }
-) {
-    // handles the incoming alerts to the registered URL for flight aware alerts
-    // accepts an http POST request that matches a specific pattern
-    // the alert is then parsed & inserted into the database
-
-    console.log('handleAlert', id, flight);
-    let results;
-
-    const { data, error } = await supabaseClient
-        .from('schedule_lookup')
-        .select('*')
-        .eq('id', id);
-
-    if (error) {
-        throw error;
-    }
-
-    return new Response(JSON.stringify({ test: data[0] }), {
+async function performLookup() {
+    // Perform the lookup
+    // Return the results
+    return new Response(JSON.stringify({ ok: 'perform lookup' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
     });
+}
+
+async function handleDatabaseUpdate(
+    updatedFlight: any,
+    supabaseClient: SupabaseClient
+) {
+    console.log('updated flight', updatedFlight.flights[0]['ident']);
+
+    const { data, error } = await supabaseClient
+        .from('flights')
+        .update({
+            ident: updatedFlight.flights[0]['ident'],
+            fa_flight_id: updatedFlight.flights[0]['fa_flight_id'],
+            filed_ete: updatedFlight.flights[0]['filed_ete'],
+            scheduled_out: updatedFlight.flights[0]['scheduled_out'],
+            scheduled_off: updatedFlight.flights[0]['scheduled_off'],
+            scheduled_on: updatedFlight.flights[0]['scheduled_on'],
+            origin_name: updatedFlight.flights[0]['origin.name'],
+            origin_city: updatedFlight.flights[0]['origin.city'],
+            origin_code_iata: updatedFlight.flights[0]['origin.code_iata'],
+            destination_name: updatedFlight.flights[0]['destination.name'],
+            destination_city: updatedFlight.flights[0]['destination.city'],
+            destination_code_iata:
+                updatedFlight.flights[0]['destination.code_iata'],
+            aircraft_type: updatedFlight.flights[0]['aircraft_type'],
+        })
+        .eq('fa_flight_id', updatedFlight.flights[0]['fa_flight_id'])
+        .select();
+    if (error) throw error;
+
+    console.log('inserted', data);
+}
+
+async function updateFlights(data: any[], supabaseClient: SupabaseClient) {
+    // Iterate over the array of flights
+    // For each flight in the array, parse the fa_flight_id
+    // Call the FlightAware API to get the latest flight status for the flight
+    // Update the flight in the database with the latest flight status
+    // Return the updated flights from the database
+    const updatedFlights = Promise.all(
+        data.map(async (flight) => {
+            fetch(
+                `https://aeroapi.flightaware.com/aeroapi/flights/${flight.fa_flight_id}?ident_type=fa_flight_id`,
+                {
+                    headers: {
+                        Accept: 'application/json',
+                        'x-apikey': Deno.env.get('FLIGHTAWARE_KEY') ?? '',
+                    },
+                }
+            )
+                .then((response) => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not OK');
+                    }
+                    return response.json();
+                })
+                .then((data) => {
+                    handleDatabaseUpdate(data, supabaseClient);
+                })
+                .catch((error) => {
+                    return new Response(
+                        JSON.stringify({ error: error.message }),
+                        {
+                            headers: {
+                                ...corsHeaders,
+                                'Content-Type': 'application/json',
+                            },
+                            status: 502,
+                        }
+                    );
+                });
+            console.log(flight.fa_flight_id);
+        })
+    );
+    console.log(updatedFlights);
+
+    return new Response(JSON.stringify({ ok: 'update flight ok' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+    });
+}
+
+async function handleIncomingScheduleCalls(
+    supabaseClient: SupabaseClient,
+    id: string
+) {
+    // Determine if the id is "update" or "schedule"
+    // If "update" then call the updateFlights function
+    // If "schedule" then call the performLookup function
+    if (id === 'update') {
+        // Select all the flights from the database and return them
+        const { data, error } = await supabaseClient
+            .from('flights')
+            .select('*');
+        if (error) throw error;
+        return updateFlights(data, supabaseClient);
+    } else if (id === 'schedule') {
+        return performLookup();
+    } else {
+        return new Response(JSON.stringify({ error: 'Invalid ID' }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200,
+        });
+    }
 }
 
 serve(async (req: Request) => {
@@ -129,17 +213,19 @@ serve(async (req: Request) => {
             }
         );
 
-        const regex = /\/(\d+)$/; // Regular expression to match a slash followed by one or more digits at the end of the string
+        // Regular expression to match a slash followed by one or more words at the end of the string
+        // Match the URL against the regular expression
+        // Parse the matched number as an integer
+        const regex = /\/(\w+)$/; // Regular expression to match a slash followed by one or more words at the end of the string
         const match = url.match(regex); // Match the URL against the regular expression
         let alertId = match ? '' : null;
 
         if (match) {
-            const number = parseInt(match[1], 10); // Parse the matched number as an integer
-            let result = number.toString();
-            alertId = result;
+            // Parse the matched word
+            alertId = match[1];
         }
 
-        let flight = null;
+        let flight;
 
         if (method === 'POST' || method === 'PUT') {
             const body = await req.json();
@@ -151,8 +237,7 @@ serve(async (req: Request) => {
             case alertId && method === 'POST':
                 return handleIncomingScheduleCalls(
                     supabaseClient,
-                    alertId as string,
-                    flight
+                    alertId as string
                 );
             case method === 'POST':
                 return scheduleFlightAlerts(supabaseClient, flight);
