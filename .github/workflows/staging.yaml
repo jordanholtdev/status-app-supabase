@@ -27,3 +27,4 @@ jobs:
             - run: |
                   supabase link --project-ref $STAGING_PROJECT_ID
                   supabase db push
+            - run: supabase functions deploy github-action-deploy --project-ref $STAGING_PROJECT_ID
