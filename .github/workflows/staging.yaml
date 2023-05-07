@@ -27,4 +27,4 @@ jobs:
             - run: |
                   supabase link --project-ref $STAGING_PROJECT_ID
                   supabase db push
-            - run: supabase functions deploy flight-lookup --project-ref $STAGING_PROJECT_ID
+            - run: supabase functions deploy flight-lookup --project-ref $STAGING_PROJECT_ID --legacy-bundle
