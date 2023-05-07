@@ -1,10 +1,9 @@
 // import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { serve } from 'serve';
-// import {
-//     createClient,
-//     SupabaseClient,
-// } from 'https://esm.sh/@supabase/supabase-js@2';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import {
+    createClient,
+    SupabaseClient,
+} from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
 
 console.log(`Function "flight-lookup" initiating`);
