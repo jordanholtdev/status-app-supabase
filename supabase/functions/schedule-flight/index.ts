@@ -1,12 +1,12 @@
 // import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
-import serve from 'serve';
+import { serve } from 'serve';
 import { corsHeaders } from '../_shared/cors.ts';
 // import {
 //     createClient,
 //     SupabaseClient,
 // } from 'https://esm.sh/@supabase/supabase-js@2';
-import createClient from 'createClient';
-import SupabaseClient from 'SupabaseClient';
+import { createClient } from 'createClient';
+import { SupabaseClient } from 'SupabaseClient';
 
 console.log(`Function "schedule-flight" up and running!`);
 
