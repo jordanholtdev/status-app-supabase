@@ -5,8 +5,7 @@ import { corsHeaders } from '../_shared/cors.ts';
 //     createClient,
 //     SupabaseClient,
 // } from 'https://esm.sh/@supabase/supabase-js@2';
-import { createClient } from 'createClient';
-import { SupabaseClient } from 'SupabaseClient';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 console.log(`Function "schedule-flight" up and running!`);
 

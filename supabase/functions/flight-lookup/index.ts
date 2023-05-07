@@ -4,8 +4,7 @@ import { serve } from 'serve';
 //     createClient,
 //     SupabaseClient,
 // } from 'https://esm.sh/@supabase/supabase-js@2';
-import { createClient } from 'createClient';
-import { SupabaseClient } from 'SupabaseClient';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { corsHeaders } from '../_shared/cors.ts';
 
 console.log(`Function "flight-lookup" initiating`);
