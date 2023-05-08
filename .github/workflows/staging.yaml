@@ -13,6 +13,7 @@ jobs:
         env:
             SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
             SUPABASE_DB_PASSWORD: ${{ secrets.STAGING_DB_PASSWORD }}
+            FLIGHTAWARE_KEY: ${{ secrets.FLIGHTAWARE_KEY }}
             STAGING_PROJECT_ID: khwwtephsxgzvfektoov
             OAUTH_GITHUB_CLIENT_ID: ${{ secrets.OAUTH_GITHUB_CLIENT_ID }}
             OAUTH_GITHUB_SECRET: ${{ secrets.OAUTH_GITHUB_SECRET }}
