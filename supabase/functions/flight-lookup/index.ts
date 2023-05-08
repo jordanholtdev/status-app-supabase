@@ -57,6 +57,7 @@ async function lookupFlight(supabaseClient: SupabaseClient, flight: Flight) {
     // Performs date check:
     // If date within range lookup executed immediately
     // Future dates scheduled, past dates dropped
+
     const submittedDate = new Date(flight.selected_date);
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - 10); // limit searches 10 days in the past
@@ -65,50 +66,54 @@ async function lookupFlight(supabaseClient: SupabaseClient, flight: Flight) {
 
     if (submittedDate > startDate && submittedDate < endDate) {
         // Fetch list if submitted date is within range
+        const fetchUrl = `https://aeroapi.flightaware.com/aeroapi/flights/${flight.ident}?start=${flight.selected_date}`;
+        const fetchOptions = {
+            headers: {
+                Accept: 'application/json',
+                'x-apikey': Deno.env.get('FLIGHTAWARE_KEY') ?? '',
+            },
+        };
 
-        let results; // fetch lookup results
-        await fetch(
-            `https://aeroapi.flightaware.com/aeroapi/flights/${flight.ident}?start=${flight.selected_date}`,
-            {
-                headers: {
-                    Accept: 'application/json',
-                    'x-apikey': Deno.env.get('FLIGHTAWARE_KEY') ?? '',
-                },
+        try {
+            console.log(
+                `Fetching data for flight ${flight.ident} on ${submittedDate}...`
+            );
+            const response = await fetch(fetchUrl, fetchOptions);
+            if (!response.ok) {
+                throw new Error('Network response was not OK');
             }
-        )
-            .then((response) => {
-                if (!response.ok) {
-                    throw new Error('Network response was not OK');
-                }
-                return response.json();
-            })
-            .then((data) => {
-                results = data;
-            })
-            .catch((error) => {
-                return new Response(JSON.stringify({ error: error.message }), {
+            const data = await response.json();
+            console.log(
+                `Data successfully fetched for flight: ${flight.ident}. Date: ${submittedDate}.`
+            );
+            return new Response(
+                JSON.stringify({
+                    results: data,
+                    isScheduled: false,
+                    lookupComplete: true,
+                    lookupStatus: 'Complete',
+                }),
+                {
                     headers: {
                         ...corsHeaders,
                         'Content-Type': 'application/json',
                     },
-                    status: 502,
-                });
+                    status: 200,
+                }
+            );
+        } catch (error) {
+            console.error(
+                `Error fetching data for flight: ${flight.ident}. Date: ${submittedDate}:`,
+                error
+            );
+            return new Response(JSON.stringify({ error: error.message }), {
+                headers: {
+                    ...corsHeaders,
+                    'Content-Type': 'application/json',
+                },
+                status: 502,
             });
-
-        console.log(`Lookup Complete: ${submittedDate}.`);
-
-        return new Response(
-            JSON.stringify({
-                results,
-                isScheduled: false,
-                lookupComplete: true,
-                lookupStatus: 'Complete',
-            }),
-            {
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                status: 200,
-            }
-        );
+        }
     } else {
         console.log(
             `Search date:${submittedDate} - out of range for immediate lookup.`
