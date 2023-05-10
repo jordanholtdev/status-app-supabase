@@ -16,6 +16,18 @@ interface FlightRequest {
         scheduled_out: Date;
         scheduled_off: Date;
         scheduled_on: Date;
+        status: string;
+        estimated_out: Date;
+        estimated_off: Date;
+        estimated_on: Date;
+        actual_off: Date;
+        actual_on: Date;
+        actual_in: Date;
+        route_distance: number;
+        diverted: boolean;
+        airport_info_url: string;
+        progress_percent: number;
+        cancelled: boolean;
         origin: {
             name: string;
             city: string;
@@ -52,6 +64,18 @@ async function scheduleFlightAlerts(
                 scheduled_out: flightRequest.flight.scheduled_out,
                 scheduled_off: flightRequest.flight.scheduled_off,
                 scheduled_on: flightRequest.flight.scheduled_on,
+                status: flightRequest.flight.status,
+                estimated_out: flightRequest.flight.estimated_out,
+                estimated_off: flightRequest.flight.estimated_off,
+                estimated_on: flightRequest.flight.estimated_on,
+                actual_off: flightRequest.flight.actual_off,
+                actual_on: flightRequest.flight.actual_on,
+                actual_in: flightRequest.flight.actual_in,
+                route_distance: flightRequest.flight.route_distance,
+                diverted: flightRequest.flight.diverted,
+                airport_info_url: flightRequest.flight.airport_info_url,
+                progress_percent: flightRequest.flight.progress_percent,
+                cancelled: flightRequest.flight.cancelled,
                 origin_name: flightRequest.flight.origin.name,
                 origin_city: flightRequest.flight.origin.city,
                 origin_code_iata: flightRequest.flight.origin.code_iata,
@@ -91,6 +115,23 @@ async function handleInsertLookupResults(
                 scheduled_off:
                     scheduledLookupResults.flights[0]['scheduled_off'],
                 scheduled_on: scheduledLookupResults.flights[0]['scheduled_on'],
+                status: scheduledLookupResults.flights[0]['status'],
+                estimated_out:
+                    scheduledLookupResults.flights[0]['estimated_out'],
+                estimated_off:
+                    scheduledLookupResults.flights[0]['estimated_off'],
+                estimated_on: scheduledLookupResults.flights[0]['estimated_on'],
+                actual_off: scheduledLookupResults.flights[0]['actual_off'],
+                actual_on: scheduledLookupResults.flights[0]['actual_on'],
+                actual_in: scheduledLookupResults.flights[0]['actual_in'],
+                route_distance:
+                    scheduledLookupResults.flights[0]['route_distance'],
+                diverted: scheduledLookupResults.flights[0]['diverted'],
+                airport_info_url:
+                    scheduledLookupResults.flights[0]['airport_info_url'],
+                progress_percent:
+                    scheduledLookupResults.flights[0]['progress_percent'],
+                cancelled: scheduledLookupResults.flights[0]['cancelled'],
                 origin_name:
                     scheduledLookupResults.flights[0]['origin']['name'],
                 origin_city:
@@ -195,6 +236,18 @@ async function handleDatabaseUpdate(
             scheduled_out: updatedFlight.flights[0]['scheduled_out'],
             scheduled_off: updatedFlight.flights[0]['scheduled_off'],
             scheduled_on: updatedFlight.flights[0]['scheduled_on'],
+            status: updatedFlight.flights[0]['status'],
+            estimated_out: updatedFlight.flights[0]['estimated_out'],
+            estimated_off: updatedFlight.flights[0]['estimated_off'],
+            estimated_on: updatedFlight.flights[0]['estimated_on'],
+            actual_off: updatedFlight.flights[0]['actual_off'],
+            actual_on: updatedFlight.flights[0]['actual_on'],
+            actual_in: updatedFlight.flights[0]['actual_in'],
+            route_distance: updatedFlight.flights[0]['route_distance'],
+            diverted: updatedFlight.flights[0]['diverted'],
+            airport_info_url: updatedFlight.flights[0]['airport_info_url'],
+            progress_percent: updatedFlight.flights[0]['progress_percent'],
+            cancelled: updatedFlight.flights[0]['cancelled'],
             origin_name: updatedFlight.flights[0]['origin.name'],
             origin_city: updatedFlight.flights[0]['origin.city'],
             origin_code_iata: updatedFlight.flights[0]['origin.code_iata'],
