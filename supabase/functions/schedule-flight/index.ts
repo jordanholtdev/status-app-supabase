@@ -50,126 +50,184 @@ async function scheduleFlightAlerts(
     flightRequest: FlightRequest
 ) {
     // get the user session for row level security RLS
-    const {
-        data: { user },
-    } = await supabaseClient.auth.getUser();
+    try {
+        const {
+            data: { user },
+        } = await supabaseClient.auth.getUser();
 
-    const { data, error } = await supabaseClient
-        .from('flights')
-        .insert([
-            {
-                ident: flightRequest.flight.ident,
-                fa_flight_id: flightRequest.flight.fa_flight_id,
-                filed_ete: flightRequest.flight.filed_ete,
-                scheduled_out: flightRequest.flight.scheduled_out,
-                scheduled_off: flightRequest.flight.scheduled_off,
-                scheduled_on: flightRequest.flight.scheduled_on,
-                status: flightRequest.flight.status,
-                estimated_out: flightRequest.flight.estimated_out,
-                estimated_off: flightRequest.flight.estimated_off,
-                estimated_on: flightRequest.flight.estimated_on,
-                actual_off: flightRequest.flight.actual_off,
-                actual_on: flightRequest.flight.actual_on,
-                actual_in: flightRequest.flight.actual_in,
-                route_distance: flightRequest.flight.route_distance,
-                diverted: flightRequest.flight.diverted,
-                airport_info_url: flightRequest.flight.airport_info_url,
-                progress_percent: flightRequest.flight.progress_percent,
-                cancelled: flightRequest.flight.cancelled,
-                origin_name: flightRequest.flight.origin.name,
-                origin_city: flightRequest.flight.origin.city,
-                origin_code_iata: flightRequest.flight.origin.code_iata,
-                destination_name: flightRequest.flight.destination.name,
-                destination_city: flightRequest.flight.destination.city,
-                destination_code_iata:
-                    flightRequest.flight.destination.code_iata,
-                aircraft_type: flightRequest.flight.aircraft_type,
-                user_id: user?.id,
-            },
-        ])
-        .select();
-    if (error) throw error;
+        const { data, error } = await supabaseClient
+            .from('flights')
+            .insert([
+                {
+                    ident: flightRequest.flight.ident,
+                    fa_flight_id: flightRequest.flight.fa_flight_id,
+                    filed_ete: flightRequest.flight.filed_ete,
+                    scheduled_out: flightRequest.flight.scheduled_out,
+                    scheduled_off: flightRequest.flight.scheduled_off,
+                    scheduled_on: flightRequest.flight.scheduled_on,
+                    status: flightRequest.flight.status,
+                    estimated_out: flightRequest.flight.estimated_out,
+                    estimated_off: flightRequest.flight.estimated_off,
+                    estimated_on: flightRequest.flight.estimated_on,
+                    actual_off: flightRequest.flight.actual_off,
+                    actual_on: flightRequest.flight.actual_on,
+                    actual_in: flightRequest.flight.actual_in,
+                    route_distance: flightRequest.flight.route_distance,
+                    diverted: flightRequest.flight.diverted,
+                    airport_info_url: flightRequest.flight.airport_info_url,
+                    progress_percent: flightRequest.flight.progress_percent,
+                    cancelled: flightRequest.flight.cancelled,
+                    origin_name: flightRequest.flight.origin.name,
+                    origin_city: flightRequest.flight.origin.city,
+                    origin_code_iata: flightRequest.flight.origin.code_iata,
+                    destination_name: flightRequest.flight.destination.name,
+                    destination_city: flightRequest.flight.destination.city,
+                    destination_code_iata:
+                        flightRequest.flight.destination.code_iata,
+                    aircraft_type: flightRequest.flight.aircraft_type,
+                    user_id: user?.id,
+                },
+            ])
+            .select();
+        if (error) throw error;
 
-    // try to fetch the weather forecast for the destination city on the depart date
-    const weatherForecast = await getWeatherForecast(
-        flightRequest.flight.destination.city,
-        flightRequest.depart_date,
-        supabaseClient
-    );
+        // try to fetch the weather forecast for the destination city on the depart date
+        let weatherForecast;
+        try {
+            weatherForecast = await getWeatherForecast(
+                data[0].destination_city,
+                data[0].scheduled_off,
+                data[0].id,
+                data[0].fa_flight_id,
+                data[0].aircraft_type,
+                data[0].user_id,
+                supabaseClient
+            );
+        } catch (error) {
+            console.log('Error fetching weather:', error.message);
+            return new Response('Internal server error', {
+                headers: { ...corsHeaders, 'Content-Type': 'text/plain' },
+                status: 500,
+            });
+        }
+        // check the weather forecast results returned from getWeatherForecast
+        // if the weather forecast is not available, log an error
+        if (!weatherForecast) {
+            console.log('Weather forecast not available');
+            return new Response('Internal server error', {
+                headers: { ...corsHeaders, 'Content-Type': 'text/plain' },
+                status: 500,
+            });
+        }
 
-    // if successful, console.log the weather forecast
-    console.log('weather forecast:', weatherForecast);
+        return new Response(JSON.stringify({ data }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200,
+        });
+    } catch (error) {
+        console.error(error);
 
-    return new Response(JSON.stringify({ data }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-    });
+        // check if the error is an instance of a specific error class, like SupabaseError
+
+        // throw a custom error message
+        throw new Error('Failed to schedule flight alerts');
+    }
 }
 
 // Create a function that takes in the destination_city
 // and returns the weather forecast for that date and location using the OpenWeather API and the OpenWeather API key stored in Supabase
 async function getWeatherForecast(
     destination_city: string,
-    depart_date: string,
+    scheduled_departure: Date,
+    flight_id: number,
+    fa_flight_id: string,
+    aircraft_type: string,
+    user_id: string,
     supabaseClient: SupabaseClient
 ) {
+    console.log(
+        `Fetching weather forecast for the destination: ${destination_city} arriving ${scheduled_departure} via ${flight_id}, onboard a ${aircraft_type}`
+    );
     // Get the OpenWeather API key from Supabase ENV
     const weatherKey = Deno.env.get('OPENWEATHER_KEY') ?? '';
     // Get the weather forecast for the destination city on the depart date
     const weatherForecastURL = `https://api.openweathermap.org/data/2.5/forecast?q=${destination_city}&appid=${weatherKey}&units=metric`;
-
-    const {
-        data: { user },
-    } = await supabaseClient.auth.getUser();
-
     try {
+        let forecastFetched: boolean = false; // fetch the weather forecast from the OpenWeather API
         const weatherForecastResponse = await fetch(weatherForecastURL);
+        // check if the weather forecast was fetched successfully
+        // if not, log an error
         if (!weatherForecastResponse.ok) {
-            throw new Error(
+            const error = new Error(
                 `Weather API returned ${weatherForecastResponse.status} ${weatherForecastResponse.statusText}`
             );
+            console.error('Error fetching weather forecast:', error);
         }
-        const weatherForecast = await weatherForecastResponse.json();
-
-        // If successful, extract the weather forecast for the depart date
-        // and insert it into the database
-        // const { data: weatherForecastData, error: insertError } =
-        //     await supabaseClient
-        //         .from('forecasts')
-        //         .insert([
-        //             {
-        //                 city: weatherForecast.city.name,
-        //                 coord_lon: weatherForecast.city.coord.lon,
-        //                 coord_lat: weatherForecast.city.coord.lat,
-        //                 sunrise: weatherForecast.city.sunrise,
-        //                 sunset: weatherForecast.city.sunset,
-        //                 country: weatherForecast.city.country,
-        //                 depart_date: depart_date,
-        //                 weather: weatherForecast.list.find(
-        //                     (forecast: any) =>
-        //                         forecast.dt_txt.split(' ')[0] === depart_date
-        //                 ),
-        //                 user_id: user?.id,
-        //             },
-        //         ])
-        //         .select();
-        // if (insertError) throw insertError;
-
+        // if the weather forecast was fetched successfully, parse the response
         console.log(
-            'weather forecast successfully retrieved, inserting:',
-            weatherForecast
+            `Weather forecast for ${destination_city} fetched successfully with status ${weatherForecastResponse.status}. Preparing data for insert.`
         );
-        return weatherForecast;
+        const weatherForecast = await weatherForecastResponse.json();
+        forecastFetched = true;
+        // format the scheduled_departure date to match the weatherForecast.dt_txt
+        const scheduled_departure_date = new Date(scheduled_departure)
+            .toISOString()
+            .split('T')[0];
+
+        // find the weather forecast for the scheduled_departure date
+        const weather = weatherForecast.list.find((forecast: any) =>
+            forecast.dt_txt.startsWith(scheduled_departure_date)
+        );
+
+        if (forecastFetched) {
+            // try to insert the weather forecast into the database
+            console.log('Preparing weather forecast data for insert');
+            try {
+                const { data: weatherForecastData, error: insertError } =
+                    await supabaseClient
+                        .from('forecasts')
+                        .insert([
+                            {
+                                flight_id: flight_id,
+                                fa_flight_id: fa_flight_id,
+                                destination_city: destination_city,
+                                forecast_city: weatherForecast.city.name,
+                                coord_lon: weatherForecast.city.coord.lon,
+                                coord_lat: weatherForecast.city.coord.lat,
+                                sunrise: weatherForecast.city.sunrise,
+                                sunset: weatherForecast.city.sunset,
+                                country: weatherForecast.city.country,
+                                scheduled_departure: scheduled_departure,
+                                weather: JSON.stringify(weather),
+                                user_id: user_id,
+                            },
+                        ])
+                        .select();
+                if (insertError) throw insertError;
+                console.log('Weather forecast inserted successfully');
+                forecastFetched = true;
+            } catch (error) {
+                console.log('Error inserting weather forecast:', error.message);
+                return new Response('Internal server error', {
+                    headers: { ...corsHeaders, 'Content-Type': 'text/plain' },
+                    status: 500,
+                });
+            }
+        }
+
+        return {
+            forecastFetched,
+            weather,
+        };
+
+        return { forecastFetched, weather };
     } catch (error) {
-        // Log the error to Supabase logs
         console.log('error fetching weather:', error);
         console.error(error.message);
-        // if (insertError) {
-        //     console.error(
-        //         `Error inserting weather error: ${insertError.message}`
-        //     );
-        // }
-        throw error;
+        return new Response('Internal server error', {
+            headers: { ...corsHeaders, 'Content-Type': 'text/plain' },
+            status: 500,
+        });
     }
 }
 
