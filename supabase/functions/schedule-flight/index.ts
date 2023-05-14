@@ -11,6 +11,7 @@ interface FlightRequest {
     depart_date: string;
     flight: {
         ident: string;
+        operator: string;
         fa_flight_id: string;
         filed_ete: number;
         scheduled_out: Date;
@@ -25,18 +26,19 @@ interface FlightRequest {
         actual_in: Date;
         route_distance: number;
         diverted: boolean;
-        airport_info_url: string;
         progress_percent: number;
         cancelled: boolean;
         origin: {
             name: string;
             city: string;
             code_iata: string;
+            airport_info_url: string;
         };
         destination: {
             name: string;
             city: string;
             code_iata: string;
+            airport_info_url: string;
         };
         aircraft_type: string;
     };
@@ -50,50 +52,286 @@ async function scheduleFlightAlerts(
     flightRequest: FlightRequest
 ) {
     // get the user session for row level security RLS
-    const {
-        data: { user },
-    } = await supabaseClient.auth.getUser();
+    try {
+        const {
+            data: { user },
+        } = await supabaseClient.auth.getUser();
 
-    const { data, error } = await supabaseClient
-        .from('flights')
-        .insert([
-            {
-                ident: flightRequest.flight.ident,
-                fa_flight_id: flightRequest.flight.fa_flight_id,
-                filed_ete: flightRequest.flight.filed_ete,
-                scheduled_out: flightRequest.flight.scheduled_out,
-                scheduled_off: flightRequest.flight.scheduled_off,
-                scheduled_on: flightRequest.flight.scheduled_on,
-                status: flightRequest.flight.status,
-                estimated_out: flightRequest.flight.estimated_out,
-                estimated_off: flightRequest.flight.estimated_off,
-                estimated_on: flightRequest.flight.estimated_on,
-                actual_off: flightRequest.flight.actual_off,
-                actual_on: flightRequest.flight.actual_on,
-                actual_in: flightRequest.flight.actual_in,
-                route_distance: flightRequest.flight.route_distance,
-                diverted: flightRequest.flight.diverted,
-                airport_info_url: flightRequest.flight.airport_info_url,
-                progress_percent: flightRequest.flight.progress_percent,
-                cancelled: flightRequest.flight.cancelled,
-                origin_name: flightRequest.flight.origin.name,
-                origin_city: flightRequest.flight.origin.city,
-                origin_code_iata: flightRequest.flight.origin.code_iata,
-                destination_name: flightRequest.flight.destination.name,
-                destination_city: flightRequest.flight.destination.city,
-                destination_code_iata:
-                    flightRequest.flight.destination.code_iata,
-                aircraft_type: flightRequest.flight.aircraft_type,
-                user_id: user?.id,
-            },
-        ])
-        .select();
-    if (error) throw error;
+        const { data, error } = await supabaseClient
+            .from('flights')
+            .insert([
+                {
+                    ident: flightRequest.flight.ident,
+                    operator: flightRequest.flight.operator,
+                    fa_flight_id: flightRequest.flight.fa_flight_id,
+                    filed_ete: flightRequest.flight.filed_ete,
+                    scheduled_out: flightRequest.flight.scheduled_out,
+                    scheduled_off: flightRequest.flight.scheduled_off,
+                    scheduled_on: flightRequest.flight.scheduled_on,
+                    status: flightRequest.flight.status,
+                    estimated_out: flightRequest.flight.estimated_out,
+                    estimated_off: flightRequest.flight.estimated_off,
+                    estimated_on: flightRequest.flight.estimated_on,
+                    actual_off: flightRequest.flight.actual_off,
+                    actual_on: flightRequest.flight.actual_on,
+                    actual_in: flightRequest.flight.actual_in,
+                    route_distance: flightRequest.flight.route_distance,
+                    diverted: flightRequest.flight.diverted,
+                    destination_airport_info_url:
+                        flightRequest.flight.destination.airport_info_url,
+                    progress_percent: flightRequest.flight.progress_percent,
+                    cancelled: flightRequest.flight.cancelled,
+                    origin_name: flightRequest.flight.origin.name,
+                    origin_city: flightRequest.flight.origin.city,
+                    origin_code_iata: flightRequest.flight.origin.code_iata,
+                    origin_airport_info_url:
+                        flightRequest.flight.origin.airport_info_url,
+                    destination_name: flightRequest.flight.destination.name,
+                    destination_city: flightRequest.flight.destination.city,
+                    destination_code_iata:
+                        flightRequest.flight.destination.code_iata,
+                    aircraft_type: flightRequest.flight.aircraft_type,
+                    user_id: user?.id,
+                },
+            ])
+            .select();
+        if (error) throw error;
 
-    return new Response(JSON.stringify({ data }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-    });
+        // try to fetch the weather forecast for the destination city on the depart date
+        let weatherForecast;
+        try {
+            weatherForecast = await getWeatherForecast(
+                data[0].destination_city,
+                data[0].scheduled_off,
+                data[0].id,
+                data[0].fa_flight_id,
+                data[0].aircraft_type,
+                data[0].user_id,
+                supabaseClient
+            );
+        } catch (error) {
+            console.log('Error fetching weather:', error.message);
+            return new Response('Internal server error', {
+                headers: { ...corsHeaders, 'Content-Type': 'text/plain' },
+                status: 500,
+            });
+        }
+        // check the weather forecast results returned from getWeatherForecast
+        // if the weather forecast is not available, log an error
+        if (!weatherForecast) {
+            console.log('Weather forecast not available');
+            return new Response('Internal server error', {
+                headers: { ...corsHeaders, 'Content-Type': 'text/plain' },
+                status: 500,
+            });
+        }
+
+        return new Response(JSON.stringify({ data }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200,
+        });
+    } catch (error) {
+        console.error(error);
+
+        // check if the error is an instance of a specific error class, like SupabaseError
+
+        // throw a custom error message
+        throw new Error('Failed to schedule flight alerts');
+    }
+}
+
+// Create a function that takes in the destination_city
+// and returns the weather forecast for that date and location using the OpenWeather API and the OpenWeather API key stored in Supabase
+async function getWeatherForecast(
+    destination_city: string,
+    scheduled_departure: Date,
+    flight_id: number,
+    fa_flight_id: string,
+    aircraft_type: string,
+    user_id: string,
+    supabaseClient: SupabaseClient
+) {
+    console.log(
+        `Fetching weather forecast for the destination: ${destination_city} arriving ${scheduled_departure} via ${flight_id}, onboard a ${aircraft_type}`
+    );
+    // Get the OpenWeather API key from Supabase ENV
+    const weatherKey = Deno.env.get('OPENWEATHER_KEY') ?? '';
+    // Get the weather forecast for the destination city on the depart date
+    const weatherForecastURL = `https://api.openweathermap.org/data/2.5/forecast?q=${destination_city}&appid=${weatherKey}&units=metric`;
+    try {
+        let forecastFetched: boolean = false; // fetch the weather forecast from the OpenWeather API
+        const weatherForecastResponse = await fetch(weatherForecastURL);
+
+        // check for weather forecast response errors and throw an error if they occur
+        if (!weatherForecastResponse.ok) {
+            // check to see if the weather forecast response is a 404
+            if (weatherForecastResponse.status === 404) {
+                // if the weather forecast response is a 404, log the error
+                console.log(
+                    `Weather forecast not available for ${destination_city} on ${scheduled_departure}`
+                );
+                // update the flight table with the error and weather forecast status code
+                // wait 2 seconds before trying to update the flight table
+                await new Promise((resolve) => setTimeout(resolve, 2000));
+                // try and update the flight table with the error and weather forecast status code
+                // if there is an error updating the flight table, log the error
+                try {
+                    const { data: updateData, error: updateError } =
+                        await supabaseClient
+                            .from('flights')
+                            .update({
+                                weather_forecast_fetched: forecastFetched,
+                                weather_forecast_status_code:
+                                    weatherForecastResponse.status,
+                                weather_forecast_error: `Forecast not available for ${destination_city} on ${scheduled_departure}`,
+                            })
+                            .eq('id', flight_id)
+                            .select();
+                    if (updateError) throw updateError;
+
+                    return new Response('Weather forecast not available', {
+                        headers: {
+                            ...corsHeaders,
+                            'Content-Type': 'text/plain',
+                        },
+                        status: 500,
+                    });
+                } catch (error) {
+                    console.error(
+                        'Error updating flight table:',
+                        error.message
+                    );
+                    return new Response(error.message, {
+                        headers: {
+                            ...corsHeaders,
+                            'Content-Type': 'text/plain',
+                        },
+                        status: 500,
+                    });
+                }
+            }
+
+            // if the weather forecast response is not a 404, throw an error
+
+            const error = new Error(
+                `Weather API returned ${weatherForecastResponse.status} ${weatherForecastResponse.statusText}`
+            );
+            console.error('Error fetching weather forecast:', error);
+            // wait 2 seconds before trying to update the flight table
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+            // try and update the flight table with the error and weather forecast status code
+            // if there is an error updating the flight table, log the error
+            try {
+                const { data: updateData, error: updateError } =
+                    await supabaseClient
+                        .from('flights')
+                        .update({
+                            weather_forecast_fetched: forecastFetched,
+                            weather_forecast_status_code:
+                                weatherForecastResponse.status,
+                            weather_forecast_error: error.message,
+                        })
+                        .eq('id', flight_id)
+                        .select();
+                if (updateError) throw updateError;
+
+                return new Response('Error fetching weather forecast', {
+                    headers: { ...corsHeaders, 'Content-Type': 'text/plain' },
+                    status: 500,
+                });
+            } catch (error) {
+                console.error('Error updating flight table:', error.message);
+            }
+        }
+        // if the weather forecast was fetched successfully, parse the response
+        console.log(
+            `Weather forecast for ${destination_city} fetched successfully with status ${weatherForecastResponse.status}.`
+        );
+        const weatherForecast = await weatherForecastResponse.json();
+        forecastFetched = true;
+        // format the scheduled_departure date to match the weatherForecast.dt_txt
+        const scheduled_departure_date = new Date(scheduled_departure)
+            .toISOString()
+            .split('T')[0];
+
+        // find the weather forecast for the scheduled_departure date
+        const weather = weatherForecast.list.find((forecast: any) =>
+            forecast.dt_txt.startsWith(scheduled_departure_date)
+        );
+
+        if (forecastFetched) {
+            // try to insert the weather forecast into the database
+            console.log('Preparing weather forecast data for insert');
+            try {
+                const { data: weatherForecastData, error: insertError } =
+                    await supabaseClient
+                        .from('forecasts')
+                        .insert([
+                            {
+                                flight_id: flight_id,
+                                fa_flight_id: fa_flight_id,
+                                destination_city: destination_city,
+                                forecast_city: weatherForecast.city.name,
+                                coord_lon: weatherForecast.city.coord.lon,
+                                coord_lat: weatherForecast.city.coord.lat,
+                                sunrise: weatherForecast.city.sunrise,
+                                sunset: weatherForecast.city.sunset,
+                                country: weatherForecast.city.country,
+                                scheduled_departure: scheduled_departure,
+                                weather: JSON.stringify(weather),
+                                user_id: user_id,
+                            },
+                        ])
+                        .select();
+                if (insertError) throw insertError;
+                console.log('Weather forecast inserted successfully');
+                forecastFetched = true;
+                // wait for the weather forecast to be inserted and then wait 2 seconds before updating the flight table
+                await new Promise((r) => setTimeout(r, 2000));
+                // try to update the flight table with the weather forecast id and status
+
+                try {
+                    console.log(
+                        `Updating flight table with weather forecast id and status for flight ${weatherForecastData[0].flight_id}`
+                    );
+                    const { data: updateData, error: updateError } =
+                        await supabaseClient
+                            .from('flights')
+                            .update({
+                                weather_forecast_id: weatherForecastData[0].id,
+                                weather_forecast_fetched: forecastFetched,
+                                weather_forecast_status_code: 200,
+                            })
+                            .eq('id', flight_id)
+                            .select();
+                    if (updateError) throw updateError;
+                    console.log(
+                        'Flight table updated successfully with weather forecast id and status'
+                    );
+                } catch (error) {
+                    console.error(
+                        'Error updating flight table:',
+                        error.message
+                    );
+                }
+            } catch (error) {
+                console.log('Error inserting weather forecast:', error.message);
+                return new Response('Internal server error', {
+                    headers: { ...corsHeaders, 'Content-Type': 'text/plain' },
+                    status: 500,
+                });
+            }
+        }
+
+        return { forecastFetched, weather };
+    } catch (error) {
+        console.log('error fetching weather:', error);
+        console.error(error.message);
+        return new Response('Internal server error', {
+            headers: { ...corsHeaders, 'Content-Type': 'text/plain' },
+            status: 500,
+        });
+    }
 }
 
 async function handleInsertLookupResults(
@@ -101,69 +339,146 @@ async function handleInsertLookupResults(
     scheduledFlight: any,
     supabaseClient: SupabaseClient
 ) {
-    // Insert the lookup results into the database
-    // Return the results
-    const { data, error } = await supabaseClient
-        .from('flights')
-        .insert([
-            {
-                ident: scheduledLookupResults.flights[0]['ident'],
-                fa_flight_id: scheduledLookupResults.flights[0]['fa_flight_id'],
-                filed_ete: scheduledLookupResults.flights[0]['filed_ete'],
-                scheduled_out:
-                    scheduledLookupResults.flights[0]['scheduled_out'],
-                scheduled_off:
-                    scheduledLookupResults.flights[0]['scheduled_off'],
-                scheduled_on: scheduledLookupResults.flights[0]['scheduled_on'],
-                status: scheduledLookupResults.flights[0]['status'],
-                estimated_out:
-                    scheduledLookupResults.flights[0]['estimated_out'],
-                estimated_off:
-                    scheduledLookupResults.flights[0]['estimated_off'],
-                estimated_on: scheduledLookupResults.flights[0]['estimated_on'],
-                actual_off: scheduledLookupResults.flights[0]['actual_off'],
-                actual_on: scheduledLookupResults.flights[0]['actual_on'],
-                actual_in: scheduledLookupResults.flights[0]['actual_in'],
-                route_distance:
-                    scheduledLookupResults.flights[0]['route_distance'],
-                diverted: scheduledLookupResults.flights[0]['diverted'],
-                airport_info_url:
-                    scheduledLookupResults.flights[0]['airport_info_url'],
-                progress_percent:
-                    scheduledLookupResults.flights[0]['progress_percent'],
-                cancelled: scheduledLookupResults.flights[0]['cancelled'],
-                origin_name:
-                    scheduledLookupResults.flights[0]['origin']['name'],
-                origin_city:
-                    scheduledLookupResults.flights[0]['origin']['city'],
-                origin_code_iata:
-                    scheduledLookupResults.flights[0]['origin']['code_iata'],
-                destination_name:
-                    scheduledLookupResults.flights[0]['destination']['name'],
-                destination_city:
-                    scheduledLookupResults.flights[0]['destination']['city'],
-                destination_code_iata:
-                    scheduledLookupResults.flights[0]['destination'][
-                        'code_iata'
-                    ],
-                aircraft_type:
-                    scheduledLookupResults.flights[0]['aircraft_type'],
-                user_id: scheduledFlight.user_id,
-            },
-        ])
-        .select();
-    if (error) throw error;
-
-    const { data: scheduledToday, error: error2 } = await supabaseClient
-        .from('schedule_lookup')
-        .update({ lookup_complete: true })
-        .eq('id', scheduledFlight.id)
-        .select();
-    if (error2) throw error2;
     console.log(
-        'Scheduled flight lookups complete. Total lookups performed:',
-        scheduledToday.length
+        `Preparing lookup results for flight ${scheduledFlight.id}. Inserting into database.`
     );
+    // Insert the lookup results into the database
+    // Return the resultsa and store them in a variable called completedLookupResults
+    let completedLookupResults;
+    try {
+        const { data: lookupInserted, error: errorLookup } =
+            await supabaseClient
+                .from('flights')
+                .insert([
+                    {
+                        ident: scheduledLookupResults.flights[0]['ident'],
+                        operator: scheduledLookupResults.flights[0]['operator'],
+                        fa_flight_id:
+                            scheduledLookupResults.flights[0]['fa_flight_id'],
+                        filed_ete:
+                            scheduledLookupResults.flights[0]['filed_ete'],
+                        scheduled_out:
+                            scheduledLookupResults.flights[0]['scheduled_out'],
+                        scheduled_off:
+                            scheduledLookupResults.flights[0]['scheduled_off'],
+                        scheduled_on:
+                            scheduledLookupResults.flights[0]['scheduled_on'],
+                        status: scheduledLookupResults.flights[0]['status'],
+                        estimated_out:
+                            scheduledLookupResults.flights[0]['estimated_out'],
+                        estimated_off:
+                            scheduledLookupResults.flights[0]['estimated_off'],
+                        estimated_on:
+                            scheduledLookupResults.flights[0]['estimated_on'],
+                        actual_off:
+                            scheduledLookupResults.flights[0]['actual_off'],
+                        actual_on:
+                            scheduledLookupResults.flights[0]['actual_on'],
+                        actual_in:
+                            scheduledLookupResults.flights[0]['actual_in'],
+                        route_distance:
+                            scheduledLookupResults.flights[0]['route_distance'],
+                        diverted: scheduledLookupResults.flights[0]['diverted'],
+                        destination_airport_info_url:
+                            scheduledLookupResults.flights[0]['destination'][
+                                'airport_info_url'
+                            ],
+                        progress_percent:
+                            scheduledLookupResults.flights[0][
+                                'progress_percent'
+                            ],
+                        cancelled:
+                            scheduledLookupResults.flights[0]['cancelled'],
+                        origin_name:
+                            scheduledLookupResults.flights[0]['origin']['name'],
+                        origin_city:
+                            scheduledLookupResults.flights[0]['origin']['city'],
+                        origin_code_iata:
+                            scheduledLookupResults.flights[0]['origin'][
+                                'code_iata'
+                            ],
+                        origin_airport_info_url:
+                            scheduledLookupResults.flights[0]['origin'][
+                                'airport_info_url'
+                            ],
+                        destination_name:
+                            scheduledLookupResults.flights[0]['destination'][
+                                'name'
+                            ],
+                        destination_city:
+                            scheduledLookupResults.flights[0]['destination'][
+                                'city'
+                            ],
+                        destination_code_iata:
+                            scheduledLookupResults.flights[0]['destination'][
+                                'code_iata'
+                            ],
+                        aircraft_type:
+                            scheduledLookupResults.flights[0]['aircraft_type'],
+                        user_id: scheduledFlight.user_id,
+                    },
+                ])
+                .select();
+        completedLookupResults = lookupInserted;
+        if (errorLookup) throw errorLookup;
+        console.log(
+            `Lookup results inserted successfully for flight ${scheduledFlight.id}.`
+        );
+
+        // verify that there are lookupInserted results and that the flight id matches the scheduled flight id
+
+        let weatherForecast;
+        try {
+            // Get the weather forecast for the flight
+            weatherForecast = await getWeatherForecast(
+                lookupInserted[0].destination_city,
+                lookupInserted[0].scheduled_off,
+                lookupInserted[0].id,
+                lookupInserted[0].fa_flight_id,
+                lookupInserted[0].aircraft_type,
+                lookupInserted[0].user_id,
+                supabaseClient
+            );
+        } catch (error) {
+            console.error('Error fetching weather forecast:', error.message);
+            return new Response('Internal server error', {
+                headers: { ...corsHeaders, 'Content-Type': 'text/plain' },
+                status: 500,
+            });
+        }
+
+        // update the schedule_lookup table with the lookup results of the lookup that was just performed
+        // include the weather forecast lookup results as well if they exist
+        try {
+            const { data: updateResults, error: updateError } =
+                await supabaseClient
+                    .from('schedule_lookup')
+                    .update({
+                        lookup_complete: true,
+                        lookup_flight_id: lookupInserted[0].id,
+                        lookup_status_code: 200,
+                        lookup_weather_complete: true,
+                    })
+                    .match({ id: scheduledFlight.id })
+                    .select();
+            if (updateError) throw updateError;
+            console.log(
+                'Scheduled lookup table updated successfully with lookup results and status'
+            );
+        } catch (error) {
+            console.error('Error updating scheduled lookup table:', error);
+            return new Response('Internal server error', {
+                headers: { ...corsHeaders, 'Content-Type': 'text/plain' },
+                status: 500,
+            });
+        }
+    } catch (error) {
+        console.error('Error inserting lookup results:', error.message);
+        return new Response('Internal server error', {
+            headers: { ...corsHeaders, 'Content-Type': 'text/plain' },
+            status: 500,
+        });
+    }
 }
 
 async function performLookup(
@@ -172,7 +487,7 @@ async function performLookup(
 ) {
     // Perform the lookup
     // Insert the results into the database
-    console.log('Performing scheduled lookups...');
+    console.log(`Performing lookup for ${scheduledToday.length} flights...`);
     const lookupResults = Promise.all(
         scheduledToday.map(async (scheduledFlight: any) => {
             fetch(
@@ -186,6 +501,9 @@ async function performLookup(
             )
                 .then((response) => {
                     if (!response.ok) {
+                        console.log(
+                            `Error performing lookup for ${scheduledFlight.ident}: ${response.status}`
+                        );
                         throw new Error('Network response was not OK');
                     }
                     return response.json();
@@ -231,6 +549,7 @@ async function handleDatabaseUpdate(
         .from('flights')
         .update({
             ident: updatedFlight.flights[0]['ident'],
+            operator: updatedFlight.flights[0]['operator'],
             fa_flight_id: updatedFlight.flights[0]['fa_flight_id'],
             filed_ete: updatedFlight.flights[0]['filed_ete'],
             scheduled_out: updatedFlight.flights[0]['scheduled_out'],
@@ -245,7 +564,8 @@ async function handleDatabaseUpdate(
             actual_in: updatedFlight.flights[0]['actual_in'],
             route_distance: updatedFlight.flights[0]['route_distance'],
             diverted: updatedFlight.flights[0]['diverted'],
-            airport_info_url: updatedFlight.flights[0]['airport_info_url'],
+            destination_airport_info_url:
+                updatedFlight.flights[0]['destination']['airport_info_url'],
             progress_percent: updatedFlight.flights[0]['progress_percent'],
             cancelled: updatedFlight.flights[0]['cancelled'],
             origin_name: updatedFlight.flights[0]['origin.name'],
@@ -260,8 +580,6 @@ async function handleDatabaseUpdate(
         .eq('fa_flight_id', updatedFlight.flights[0]['fa_flight_id'])
         .select();
     if (error) throw error;
-
-    console.log('Flight updates complete', data);
 }
 
 async function updateFlights(data: any[], supabaseClient: SupabaseClient) {
@@ -270,6 +588,8 @@ async function updateFlights(data: any[], supabaseClient: SupabaseClient) {
     // Call the FlightAware API to get the latest flight status for the flight
     // Update the flight in the database with the latest flight status
     // Return the updated flights from the database
+    console.log(`Fetching latest flight status...`);
+    console.log(`Updating ${data.length} flights...`);
     const updatedFlights = Promise.all(
         data.map(async (flight) => {
             fetch(
@@ -283,11 +603,13 @@ async function updateFlights(data: any[], supabaseClient: SupabaseClient) {
             )
                 .then((response) => {
                     if (!response.ok) {
+                        console.log(`Error updating flight: ${flight.ident}`);
                         throw new Error('Network response was not OK');
                     }
                     return response.json();
                 })
                 .then((data) => {
+                    console.log(`Flight updated: ${flight.ident}`);
                     handleDatabaseUpdate(data, supabaseClient);
                 })
                 .catch((error) => {
@@ -302,10 +624,8 @@ async function updateFlights(data: any[], supabaseClient: SupabaseClient) {
                         }
                     );
                 });
-            console.log(flight.fa_flight_id);
         })
     );
-    console.log(updatedFlights);
 
     return new Response(JSON.stringify({ ok: 'Flight updates successful' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
