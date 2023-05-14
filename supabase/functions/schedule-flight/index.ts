@@ -90,10 +90,87 @@ async function scheduleFlightAlerts(
         .select();
     if (error) throw error;
 
+    // try to fetch the weather forecast for the destination city on the depart date
+    const weatherForecast = await getWeatherForecast(
+        flightRequest.flight.destination.city,
+        flightRequest.depart_date,
+        supabaseClient
+    );
+
+    // if successful, console.log the weather forecast
+    console.log('weather forecast:', weatherForecast);
+
     return new Response(JSON.stringify({ data }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
     });
+}
+
+// Create a function that takes in the destination_city
+// and returns the weather forecast for that date and location using the OpenWeather API and the OpenWeather API key stored in Supabase
+async function getWeatherForecast(
+    destination_city: string,
+    depart_date: string,
+    supabaseClient: SupabaseClient
+) {
+    // Get the OpenWeather API key from Supabase ENV
+    const weatherKey = Deno.env.get('OPENWEATHER_KEY') ?? '';
+    // Get the weather forecast for the destination city on the depart date
+    const weatherForecastURL = `https://api.openweathermap.org/data/2.5/forecast?q=${destination_city}&appid=${weatherKey}&units=metric`;
+
+    const {
+        data: { user },
+    } = await supabaseClient.auth.getUser();
+
+    try {
+        const weatherForecastResponse = await fetch(weatherForecastURL);
+        if (!weatherForecastResponse.ok) {
+            throw new Error(
+                `Weather API returned ${weatherForecastResponse.status} ${weatherForecastResponse.statusText}`
+            );
+        }
+        const weatherForecast = await weatherForecastResponse.json();
+
+        // If successful, extract the weather forecast for the depart date
+        // and insert it into the database
+        // const { data: weatherForecastData, error: insertError } =
+        //     await supabaseClient
+        //         .from('forecasts')
+        //         .insert([
+        //             {
+        //                 city: weatherForecast.city.name,
+        //                 coord_lon: weatherForecast.city.coord.lon,
+        //                 coord_lat: weatherForecast.city.coord.lat,
+        //                 sunrise: weatherForecast.city.sunrise,
+        //                 sunset: weatherForecast.city.sunset,
+        //                 country: weatherForecast.city.country,
+        //                 depart_date: depart_date,
+        //                 weather: weatherForecast.list.find(
+        //                     (forecast: any) =>
+        //                         forecast.dt_txt.split(' ')[0] === depart_date
+        //                 ),
+        //                 user_id: user?.id,
+        //             },
+        //         ])
+        //         .select();
+        // if (insertError) throw insertError;
+
+        console.log(
+            'weather forecast successfully retrieved, inserting:',
+            weatherForecast
+        );
+        return weatherForecast;
+    } catch (error) {
+        // Log the error to Supabase logs
+        console.log('error fetching weather:', error);
+        console.error(error.message);
+        // if (insertError) {
+        //     console.error(
+        //         `Error inserting weather error: ${insertError.message}`
+        //     );
+        // }
+        throw error;
+    }
 }
 
 async function handleInsertLookupResults(
