@@ -80,7 +80,28 @@ async function lookupFlight(supabaseClient: SupabaseClient, flight: Flight) {
             );
             const response = await fetch(fetchUrl, fetchOptions);
             if (!response.ok) {
-                throw new Error('Network response was not OK');
+                if (response.status >= 400 && response.status < 500) {
+                    // if the error is a 4xx error, return the response as-is
+                    const data = await response.json();
+                    return new Response(
+                        JSON.stringify({
+                            results: [],
+                            isScheduled: false,
+                            lookupComplete: true,
+                            lookupStatus: `Error: ${response.status} ${response.statusText}. ${data.title} - ${data.detail} Please check flight number & try again. `,
+                        }),
+                        {
+                            headers: {
+                                ...corsHeaders,
+                                'Content-Type': 'application/json',
+                            },
+                            status: 200,
+                        }
+                    );
+                } else {
+                    const errorMessage = `Network response was not OK: ${response.status} ${response.statusText}.`;
+                    throw new Error(errorMessage);
+                }
             }
             const data = await response.json();
             console.log(
@@ -106,13 +127,19 @@ async function lookupFlight(supabaseClient: SupabaseClient, flight: Flight) {
                 `Error fetching data for flight: ${flight.ident}. Date: ${submittedDate}:`,
                 error
             );
-            return new Response(JSON.stringify({ error: error.message }), {
-                headers: {
-                    ...corsHeaders,
-                    'Content-Type': 'application/json',
-                },
-                status: 502,
-            });
+            const errorResponse = new Response(
+                JSON.stringify({
+                    error: error.message,
+                }),
+                {
+                    headers: {
+                        ...corsHeaders,
+                        'Content-Type': 'application/json',
+                    },
+                    status: 502,
+                }
+            );
+            return errorResponse;
         }
     } else {
         console.log(
@@ -124,10 +151,11 @@ async function lookupFlight(supabaseClient: SupabaseClient, flight: Flight) {
             console.log('Not scheduling: Date too far past');
             return new Response(
                 JSON.stringify({
-                    results: [{ msg: 'not scheduled' }],
+                    results: [],
                     isScheduled: false,
                     lookupComplete: false,
-                    lookupStatus: 'Not Scheduled',
+                    lookupStatus:
+                        'The submitted flight number has not been scheduled for lookup. The date exceeds the 10 day historical information limit.',
                 }),
                 {
                     headers: {
