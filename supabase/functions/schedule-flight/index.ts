@@ -5,6 +5,7 @@ import {
     SupabaseClient,
 } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getWeatherForecast } from './getForecast.ts';
+import { updateScheduledTable } from './updateScheduledTable.ts';
 
 console.log(`Function "schedule-flight" up and running!`);
 
@@ -310,6 +311,13 @@ async function performLookup(
                     if (!response.ok) {
                         console.log(
                             `Error performing lookup for ${scheduledFlight.ident}: ${response.status}`
+                        );
+                        // if the response is not ok, throw an error
+                        // update the schedule_lookup table with the lookup results of the lookup that was just performed
+                        updateScheduledTable(
+                            response,
+                            supabaseClient,
+                            scheduledFlight
                         );
                         throw new Error('Network response was not OK');
                     }
