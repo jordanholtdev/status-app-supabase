@@ -135,9 +135,25 @@ async function scheduleFlightAlerts(
     } catch (error) {
         console.error(error);
 
-        // check if the error is an instance of a specific error class, like SupabaseError
+        // check to see what the error is and return a response with the appropriate status code
+        if (error.message.includes('duplicate key value violates unique')) {
+            return new Response(
+                JSON.stringify({
+                    results: [],
+                    isScheduled: false,
+                    lookupComplete: true,
+                    lookupStatus: `Flight ${flightRequest.flight.ident} is already scheduled`,
+                }),
+                {
+                    headers: {
+                        ...corsHeaders,
+                        'Content-Type': 'application/json',
+                    },
+                    status: 409,
+                }
+            );
+        }
 
-        // throw a custom error message
         throw new Error('Failed to schedule flight alerts');
     }
 }

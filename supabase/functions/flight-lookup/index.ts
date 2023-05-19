@@ -104,6 +104,26 @@ async function lookupFlight(supabaseClient: SupabaseClient, flight: Flight) {
                 }
             }
             const data = await response.json();
+
+            // check to see if there are any results in the flights array
+            if (data.flights.length === 0) {
+                return new Response(
+                    JSON.stringify({
+                        results: [],
+                        isScheduled: false,
+                        lookupComplete: true,
+                        lookupStatus: `No results found for flight: ${flight.ident}. Please check flight number & try again.`,
+                    }),
+                    {
+                        headers: {
+                            ...corsHeaders,
+                            'Content-Type': 'application/json',
+                        },
+                        status: 200,
+                    }
+                );
+            }
+
             console.log(
                 `Data successfully fetched for flight: ${flight.ident}. Date: ${submittedDate}.`
             );
